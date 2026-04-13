@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FileFlow</title>
+<style>
+  :root {
+    --bg: #111111;
+    --card: #191919;
+    --card-border: #2a2a2a;
+    --text: #ebebeb;
+    --text-mid: #b0b0b0;
+    --text-dim: #787878;
+    --keep: #22c55e;
+    --keep-glow: rgba(34, 197, 94, 0.25);
+    --archive: #ef4444;
+    --archive-glow: rgba(239, 68, 68, 0.25);
+    --accent: #ffffff;
+    --accent-dim: rgba(255, 255, 255, 0.06);
+    --hover: rgba(255, 255, 255, 0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  /* Header */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--card-border);
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .header h1 { font-size: 17px; font-weight: 500; letter-spacing: -0.3px; color: var(--text-mid); }
+  .header h1 span { color: var(--text); font-weight: 600; }
+  .settings-btn {
+    width: 30px; height: 30px; border-radius: 6px;
+    border: 1px solid var(--card-border); background: transparent;
+    color: var(--text-dim); font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .settings-btn:hover { color: var(--text); border-color: var(--text-dim); }
+  .settings-btn.active { color: var(--text); border-color: var(--text-mid); background: var(--accent-dim); }
+  .stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); letter-spacing: 0.3px; text-transform: uppercase; }
+  .stats .count { color: var(--text-mid); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Source indicator */
+  .source-indicator {
+    padding: 6px 24px; font-size: 11px; color: var(--text-dim);
+    border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; gap: 5px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .source-indicator .folder-path { color: #c0c0c0; }
+  .source-indicator .sep { color: var(--text-dim); opacity: 0.6; }
+
+  /* Main */
+  .main {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 20px; position: relative; overflow: hidden;
+  }
+
+  /* Card */
+  .card {
+    width: 100%; max-width: 680px; height: calc(100vh - 200px); max-height: 700px;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 12px;
+    display: flex; flex-direction: column; position: relative;
+    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.2s ease;
+    will-change: transform, opacity;
+  }
+  .card.swipe-right { transform: translateX(120%) rotate(12deg); opacity: 0; }
+  .card.swipe-left { transform: translateX(-120%) rotate(-12deg); opacity: 0; }
+  .card.entering { transform: scale(0.96) translateY(16px); opacity: 0; }
+
+  /* Decision overlays */
+  .decision-overlay {
+    position: absolute; top: 20px; z-index: 10;
+    padding: 6px 20px; border-radius: 6px;
+    font-size: 22px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+    opacity: 0; transition: opacity 0.15s ease; pointer-events: none;
+  }
+  .decision-keep { right: 20px; color: var(--keep); border: 2px solid var(--keep); transform: rotate(12deg); }
+  .decision-archive { left: 20px; color: var(--archive); border: 2px solid var(--archive); transform: rotate(-12deg); }
+  .card.hint-keep .decision-keep { opacity: 1; }
+  .card.hint-archive .decision-archive { opacity: 1; }
+  .card.hint-keep { box-shadow: 0 0 30px var(--keep-glow); }
+  .card.hint-archive { box-shadow: 0 0 30px var(--archive-glow); }
+
+  /* File header */
+  .file-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--card-border);
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+  .file-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--accent-dim); border: 1px solid var(--card-border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: var(--text-dim);
+    flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.5px;
+    font-family: 'SF Mono', monospace;
+  }
+  .file-meta h2 { font-size: 14px; font-weight: 500; word-break: break-word; line-height: 1.3; }
+  .file-meta p { font-size: 11px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.2px; }
+
+  /* Preview */
+  .preview {
+    flex: 1; overflow: auto; padding: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .preview img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+  .preview iframe { width: 100%; height: 100%; border: none; border-radius: 6px; background: white; }
+  .preview pre {
+    width: 100%; height: 100%; overflow: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px;
+    background: #141414; border-radius: 8px; border: 1px solid var(--card-border);
+    white-space: pre-wrap; word-break: break-word; color: #c0c0c0;
+  }
+  .preview .markdown-body { width: 100%; height: 100%; overflow: auto; padding: 20px; font-size: 14px; line-height: 1.7; color: #d0d0d0; }
+  .preview .markdown-body h1, .preview .markdown-body h2, .preview .markdown-body h3 { margin: 16px 0 8px; font-weight: 600; color: var(--text); }
+  .preview .markdown-body h1 { font-size: 22px; }
+  .preview .markdown-body h2 { font-size: 18px; }
+  .preview .markdown-body h3 { font-size: 15px; }
+  .preview .markdown-body p { margin: 8px 0; }
+  .preview .markdown-body code { background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #c0c0c0; }
+  .preview .markdown-body pre { background: #141414; padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--card-border); }
+  .preview .markdown-body pre code { background: none; padding: 0; }
+  .preview .markdown-body ul, .preview .markdown-body ol { padding-left: 24px; }
+  .preview .markdown-body blockquote { border-left: 2px solid var(--text-dim); padding-left: 12px; color: var(--text-dim); margin: 8px 0; }
+  .preview .binary-info { text-align: center; color: var(--text-dim); }
+  .preview .binary-info .icon { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding: 16px 24px; background: var(--accent-dim); border-radius: 8px; border: 1px solid var(--card-border); }
+  .preview .binary-info p { margin: 4px 0; font-size: 13px; }
+
+  /* Controls */
+  .controls {
+    display: flex; align-items: center; justify-content: center;
+    gap: 20px; padding: 14px 24px; border-top: 1px solid var(--card-border);
+  }
+  .btn {
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 2px solid var(--card-border); background: transparent;
+    color: var(--text-dim); font-size: 20px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn:hover { transform: scale(1.08); }
+  .btn:active { transform: scale(0.94); }
+  .btn-archive { border-color: rgba(239,68,68,0.4); color: var(--archive); }
+  .btn-archive:hover { background: var(--archive); color: white; border-color: var(--archive); }
+  .btn-keep { border-color: rgba(34,197,94,0.4); color: var(--keep); }
+  .btn-keep:hover { background: var(--keep); color: white; border-color: var(--keep); }
+  .btn-undo { border-color: var(--card-border); color: var(--text-dim); font-size: 16px; }
+  .btn-undo:hover { background: var(--accent-dim); color: var(--text-mid); border-color: var(--text-dim); }
+  .key-hint { font-size: 10px; color: var(--text-dim); text-align: center; margin-top: 4px; letter-spacing: 0.5px; }
+  .btn-wrap { display: flex; flex-direction: column; align-items: center; }
+
+  /* Progress */
+  .progress-bar { height: 2px; background: var(--card-border); }
+  .progress-fill { height: 100%; background: var(--text-dim); transition: width 0.3s ease; }
+
+  /* Empty state */
+  .empty-state { text-align: center; color: var(--text-dim); }
+  .empty-state .empty-icon { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; color: var(--text-mid); }
+  .empty-state h2 { font-size: 18px; color: var(--text); margin-bottom: 8px; font-weight: 500; }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+  .empty-state code { background: var(--card); padding: 3px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--card-border); }
+
+  /* Counter */
+  .counter {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); padding: 3px 12px; border-radius: 20px;
+    font-size: 11px; color: var(--text-dim); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--card); border: 1px solid var(--card-border);
+    padding: 8px 18px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: all 0.3s ease; z-index: 100; pointer-events: none;
+    color: var(--text-mid);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ====== Settings Panel ====== */
+  .settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+    z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+  }
+  .settings-overlay.open { opacity: 1; pointer-events: all; }
+
+  .settings-panel {
+    position: fixed; top: 0; right: -420px; bottom: 0; width: 380px;
+    background: var(--bg); border-left: 1px solid var(--card-border);
+    z-index: 201; overflow-y: auto;
+    transition: right 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    display: flex; flex-direction: column;
+  }
+  .settings-overlay.open .settings-panel { right: 0; }
+
+  .settings-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--card-border); flex-shrink: 0;
+  }
+  .settings-header h2 { font-size: 14px; font-weight: 500; color: var(--text-mid); text-transform: uppercase; letter-spacing: 1px; }
+  .settings-close {
+    width: 26px; height: 26px; border-radius: 6px;
+    border: 1px solid var(--card-border); background: transparent;
+    color: var(--text-dim); font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .settings-close:hover { color: var(--text); border-color: var(--text-dim); }
+
+  .settings-body { flex: 1; padding: 20px 24px; overflow-y: auto; }
+
+  .setting-group { margin-bottom: 24px; }
+  .setting-group label {
+    display: block; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  .setting-group .current-path {
+    font-family: 'SF Mono', monospace; font-size: 12px;
+    color: #c0c0c0; background: var(--accent-dim);
+    padding: 8px 12px; border-radius: 6px; margin-bottom: 8px;
+    word-break: break-all; border: 1px solid var(--card-border);
+  }
+  .path-input-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .path-input {
+    flex: 1; padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--card-border); background: var(--card);
+    color: var(--text); font-family: 'SF Mono', monospace; font-size: 12px; outline: none;
+  }
+  .path-input:focus { border-color: var(--text-dim); }
+  .browse-btn {
+    padding: 7px 12px; border-radius: 6px;
+    border: 1px solid var(--card-border); background: transparent;
+    color: var(--text-dim); font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .browse-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+  /* Folder browser */
+  .folder-browser {
+    border: 1px solid var(--card-border); border-radius: 8px;
+    background: var(--card); overflow: hidden; display: none;
+  }
+  .folder-browser.open { display: block; }
+  .browser-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--card-border);
+  }
+  .browser-back {
+    width: 24px; height: 24px; border-radius: 4px;
+    border: 1px solid var(--card-border); background: transparent;
+    color: var(--text-dim); cursor: pointer; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .browser-back:hover { color: var(--text); border-color: var(--text-dim); }
+  .browser-path {
+    flex: 1; font-family: 'SF Mono', monospace; font-size: 10px;
+    color: var(--text-dim); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; direction: rtl; text-align: left;
+  }
+  .browser-select {
+    padding: 3px 10px; border-radius: 4px; border: 1px solid var(--text-dim);
+    background: transparent; color: var(--text); font-size: 11px;
+    font-weight: 500; cursor: pointer;
+  }
+  .browser-select:hover { background: var(--text); color: var(--bg); }
+  .browser-list { max-height: 220px; overflow-y: auto; }
+  .browser-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; cursor: pointer; font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s;
+  }
+  .browser-item:hover { background: var(--hover); }
+  .browser-item:last-child { border-bottom: none; }
+  .browser-item .folder-icon { font-size: 10px; flex-shrink: 0; color: var(--text-dim); font-weight: 600; font-family: 'SF Mono', monospace; }
+  .browser-item .folder-name { flex: 1; color: #c0c0c0; }
+  .browser-item .folder-count { font-size: 10px; color: var(--text-dim); }
+  .browser-item .folder-arrow { color: var(--text-dim); font-size: 11px; }
+  .browser-empty { padding: 14px; text-align: center; font-size: 11px; color: var(--text-dim); }
+
+  .settings-save {
+    margin-top: 4px; width: 100%; padding: 9px;
+    border-radius: 6px; border: 1px solid var(--text-dim);
+    background: transparent; color: var(--text);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .settings-save:hover { background: var(--text); color: var(--bg); }
+  .settings-save:disabled { opacity: 0.3; cursor: default; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>file<span>flow</span></h1>
+    <button class="settings-btn" id="settings-toggle" title="Settings (S)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+  <div class="stats">
+    <span>src <span class="count" id="source-count">0</span></span>
+    <span>inbox <span class="count" id="inbox-count">0</span></span>
+    <span>archive <span class="count" id="archive-count">0</span></span>
+  </div>
+</div>
+<div class="source-indicator">
+  <span id="source-path">~/FileFlow/Inbox</span>
+  <span class="sep">&rarr;</span>
+  <span id="inbox-path-indicator">~/FileFlow/Inbox</span>
+  <span class="sep">|</span>
+  <span id="archive-path">~/FileFlow/Archive</span>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+<div class="main" id="main">
+  <div class="card" id="card" style="display:none;">
+    <div class="decision-overlay decision-keep">Keep</div>
+    <div class="decision-overlay decision-archive">Archive</div>
+    <div class="file-header">
+      <div class="file-icon" id="file-icon">TXT</div>
+      <div class="file-meta">
+        <h2 id="file-name"></h2>
+        <p id="file-info"></p>
+      </div>
+    </div>
+    <div class="preview" id="preview"></div>
+    <div class="counter" id="counter"></div>
+  </div>
+  <div class="empty-state" id="empty" style="display:none;">
+    <div class="empty-icon">All clear</div>
+    <h2>Nothing to sort</h2>
+    <p>Drop files into your source folder:<br><code id="inbox-path"></code></p>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="btn-wrap">
+    <button class="btn btn-archive" id="btn-archive" title="Archive">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="key-hint">&larr; H</div>
+  </div>
+  <div class="btn-wrap">
+    <button class="btn btn-undo" id="btn-undo" title="Undo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+    </button>
+    <div class="key-hint">Z</div>
+  </div>
+  <div class="btn-wrap">
+    <button class="btn btn-keep" id="btn-keep" title="Keep">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </button>
+    <div class="key-hint">&rarr; L</div>
+  </div>
+</div>
+
+<!-- Settings Panel -->
+<div class="settings-overlay" id="settings-overlay">
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-header">
+      <h2>Settings</h2>
+      <button class="settings-close" id="settings-close">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+
+      <div class="setting-group">
+        <label>Source &mdash; evaluate files from</label>
+        <div class="current-path" id="cfg-source-current"></div>
+        <div class="path-input-row">
+          <input class="path-input" id="cfg-source-input" type="text" placeholder="~/Documents">
+          <button class="browse-btn" id="cfg-source-browse">Browse</button>
+        </div>
+        <div class="folder-browser" id="browser-source">
+          <div class="browser-header">
+            <button class="browser-back" id="browser-source-back">&larr;</button>
+            <div class="browser-path" id="browser-source-path"></div>
+            <button class="browser-select" id="browser-source-select">Select</button>
+          </div>
+          <div class="browser-list" id="browser-source-list"></div>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Inbox &mdash; keep moves here</label>
+        <div class="current-path" id="cfg-inbox-current"></div>
+        <div class="path-input-row">
+          <input class="path-input" id="cfg-inbox-input" type="text" placeholder="~/FileFlow/Inbox">
+          <button class="browse-btn" id="cfg-inbox-browse">Browse</button>
+        </div>
+        <div class="folder-browser" id="browser-inbox">
+          <div class="browser-header">
+            <button class="browser-back" id="browser-inbox-back">&larr;</button>
+            <div class="browser-path" id="browser-inbox-path"></div>
+            <button class="browser-select" id="browser-inbox-select">Select</button>
+          </div>
+          <div class="browser-list" id="browser-inbox-list"></div>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>Archive &mdash; archive moves here</label>
+        <div class="current-path" id="cfg-archive-current"></div>
+        <div class="path-input-row">
+          <input class="path-input" id="cfg-archive-input" type="text" placeholder="~/FileFlow/Archive">
+          <button class="browse-btn" id="cfg-archive-browse">Browse</button>
+        </div>
+        <div class="folder-browser" id="browser-archive">
+          <div class="browser-header">
+            <button class="browser-back" id="browser-archive-back">&larr;</button>
+            <div class="browser-path" id="browser-archive-path"></div>
+            <button class="browser-select" id="browser-archive-select">Select</button>
+          </div>
+          <div class="browser-list" id="browser-archive-list"></div>
+        </div>
+      </div>
+
+      <button class="settings-save" id="settings-save">Save &amp; Reload</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const card = $('#card');
+const preview = $('#preview');
+const emptyState = $('#empty');
+
+let files = [];
+let currentIndex = 0;
+let totalFiles = 0;
+let processing = false;
+let settingsOpen = false;
+
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+// ====== Settings ======
+
+async function openSettings() {
+  settingsOpen = true;
+  const cfg = await fetchJSON('/api/config');
+  $('#cfg-source-current').textContent = cfg.source_dir;
+  $('#cfg-inbox-current').textContent = cfg.inbox_dir;
+  $('#cfg-archive-current').textContent = cfg.archive_dir;
+  $('#cfg-source-input').value = cfg.source_dir;
+  $('#cfg-inbox-input').value = cfg.inbox_dir;
+  $('#cfg-archive-input').value = cfg.archive_dir;
+  $('#settings-overlay').classList.add('open');
+  $('#settings-toggle').classList.add('active');
+  $('#browser-source').classList.remove('open');
+  $('#browser-inbox').classList.remove('open');
+  $('#browser-archive').classList.remove('open');
+}
+
+function closeSettings() {
+  settingsOpen = false;
+  $('#settings-overlay').classList.remove('open');
+  $('#settings-toggle').classList.remove('active');
+}
+
+function toggleSettings() {
+  if (settingsOpen) closeSettings(); else openSettings();
+}
+
+const browsers = {
+  source: { currentPath: '', el: 'browser-source' },
+  inbox: { currentPath: '', el: 'browser-inbox' },
+  archive: { currentPath: '', el: 'browser-archive' },
+};
+
+async function openBrowser(which) {
+  const b = browsers[which];
+  const input = $(`#cfg-${which}-input`);
+  await navigateBrowser(which, input.value || '~');
+  $(`#${b.el}`).classList.add('open');
+}
+
+async function navigateBrowser(which, path) {
+  const b = browsers[which];
+  const data = await fetchJSON(`/api/browse?path=${encodeURIComponent(path)}`);
+  b.currentPath = data.current;
+  $(`#${b.el}-path`).textContent = data.current;
+  const list = $(`#${b.el}-list`);
+  list.innerHTML = '';
+  if (data.directories.length === 0) {
+    list.innerHTML = '<div class="browser-empty">No subfolders</div>';
+    return;
+  }
+  data.directories.forEach(dir => {
+    const item = document.createElement('div');
+    item.className = 'browser-item';
+    const countText = dir.file_count >= 0 ? `${dir.file_count}` : '';
+    item.innerHTML = `
+      <span class="folder-icon">/</span>
+      <span class="folder-name">${escapeHtml(dir.name)}</span>
+      <span class="folder-count">${countText}</span>
+      <span class="folder-arrow">&rsaquo;</span>
+    `;
+    item.addEventListener('click', () => navigateBrowser(which, dir.path));
+    list.appendChild(item);
+  });
+}
+
+function selectBrowserFolder(which) {
+  const b = browsers[which];
+  $(`#cfg-${which}-input`).value = b.currentPath;
+  $(`#${b.el}`).classList.remove('open');
+}
+
+function browserGoUp(which) {
+  const b = browsers[which];
+  const parent = b.currentPath.split('/').slice(0, -1).join('/') || '/';
+  navigateBrowser(which, parent);
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function saveSettings() {
+  const btn = $('#settings-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  const source = $('#cfg-source-input').value.trim();
+  const inbox = $('#cfg-inbox-input').value.trim();
+  const archive = $('#cfg-archive-input').value.trim();
+  const result = await fetchJSON('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_dir: source, inbox_dir: inbox, archive_dir: archive }),
+  });
+  if (result.error) {
+    showToast(result.error);
+    btn.disabled = false;
+    btn.textContent = 'Save & Reload';
+    return;
+  }
+  btn.textContent = 'Saved';
+  showToast('Folders updated');
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = 'Save & Reload';
+    closeSettings();
+    loadFiles();
+  }, 500);
+}
+
+$('#settings-toggle').addEventListener('click', toggleSettings);
+$('#settings-close').addEventListener('click', closeSettings);
+$('#settings-overlay').addEventListener('click', e => { if (e.target === $('#settings-overlay')) closeSettings(); });
+$('#settings-save').addEventListener('click', saveSettings);
+$('#cfg-source-browse').addEventListener('click', () => openBrowser('source'));
+$('#cfg-inbox-browse').addEventListener('click', () => openBrowser('inbox'));
+$('#cfg-archive-browse').addEventListener('click', () => openBrowser('archive'));
+$('#browser-source-select').addEventListener('click', () => selectBrowserFolder('source'));
+$('#browser-inbox-select').addEventListener('click', () => selectBrowserFolder('inbox'));
+$('#browser-archive-select').addEventListener('click', () => selectBrowserFolder('archive'));
+$('#browser-source-back').addEventListener('click', () => browserGoUp('source'));
+$('#browser-inbox-back').addEventListener('click', () => browserGoUp('inbox'));
+$('#browser-archive-back').addEventListener('click', () => browserGoUp('archive'));
+
+// ====== File Sorting ======
+
+async function loadFiles() {
+  const data = await fetchJSON('/api/files');
+  files = data.files;
+  totalFiles = data.total;
+  currentIndex = 0;
+  updateStats();
+  showCurrent();
+}
+
+async function updateStats() {
+  const stats = await fetchJSON('/api/stats');
+  const shorten = p => p.replace(/^\/Users\/[^/]+/, '~');
+  $('#source-count').textContent = stats.source >= 0 ? stats.source : '?';
+  $('#inbox-count').textContent = stats.inbox >= 0 ? stats.inbox : '?';
+  $('#archive-count').textContent = stats.archive >= 0 ? stats.archive : '?';
+  $('#inbox-path').textContent = stats.source_dir;
+  $('#source-path').textContent = shorten(stats.source_dir);
+  $('#inbox-path-indicator').textContent = shorten(stats.inbox_dir);
+  $('#archive-path').textContent = shorten(stats.archive_dir);
+}
+
+function showCurrent() {
+  if (files.length === 0) {
+    card.style.display = 'none';
+    emptyState.style.display = 'block';
+    $('#progress').style.width = '100%';
+    return;
+  }
+  emptyState.style.display = 'none';
+  card.style.display = 'flex';
+  card.classList.add('entering');
+  card.classList.remove('swipe-left', 'swipe-right', 'hint-keep', 'hint-archive');
+  requestAnimationFrame(() => { requestAnimationFrame(() => { card.classList.remove('entering'); }); });
+  const filename = files[currentIndex];
+  loadFilePreview(filename);
+  const sorted = totalFiles - files.length;
+  const pct = totalFiles > 0 ? (sorted / totalFiles) * 100 : 0;
+  $('#progress').style.width = pct + '%';
+  $('#counter').textContent = `${currentIndex + 1} / ${files.length}`;
+}
+
+async function loadFilePreview(filename) {
+  const info = await fetchJSON(`/api/file/${encodeURIComponent(filename)}`);
+  if (!info || info.error) return;
+  $('#file-name').textContent = info.name;
+  $('#file-info').textContent = `${info.size_human}  ·  ${info.extension || 'no ext'}  ·  ${info.modified_human}`;
+  $('#file-icon').textContent = getTypeLabel(info);
+  preview.innerHTML = '';
+
+  if (info.preview_type === 'image') {
+    const img = document.createElement('img');
+    img.src = `/api/preview/${encodeURIComponent(filename)}`;
+    img.alt = filename;
+    preview.appendChild(img);
+  } else if (info.preview_type === 'pdf') {
+    const iframe = document.createElement('iframe');
+    iframe.src = `/api/preview/${encodeURIComponent(filename)}`;
+    preview.appendChild(iframe);
+  } else if (info.preview_type === 'markdown') {
+    const data = await fetchJSON(`/api/preview/${encodeURIComponent(filename)}`);
+    if (data.html) {
+      const div = document.createElement('div');
+      div.className = 'markdown-body';
+      div.innerHTML = data.html;
+      preview.appendChild(div);
+    } else if (data.text) {
+      const pre = document.createElement('pre');
+      pre.textContent = data.text;
+      preview.appendChild(pre);
+    }
+  } else if (info.preview_type === 'text') {
+    const data = await fetchJSON(`/api/preview/${encodeURIComponent(filename)}`);
+    const pre = document.createElement('pre');
+    pre.textContent = data.text || '';
+    preview.appendChild(pre);
+  } else {
+    preview.innerHTML = `
+      <div class="binary-info">
+        <div class="icon">${getTypeLabel(info)}</div>
+        <p><strong>${escapeHtml(info.name)}</strong></p>
+        <p>${info.size_human} · ${info.mime}</p>
+        <p style="margin-top:8px;font-size:11px;opacity:0.5;">No preview available</p>
+      </div>`;
+  }
+}
+
+function getTypeLabel(info) {
+  const ext = info.extension;
+  if (info.preview_type === 'image') return 'IMG';
+  if (ext === '.pdf') return 'PDF';
+  if (['.md', '.markdown'].includes(ext)) return 'MD';
+  if (['.doc', '.docx'].includes(ext)) return 'DOC';
+  if (['.xls', '.xlsx'].includes(ext)) return 'XLS';
+  if (['.csv'].includes(ext)) return 'CSV';
+  if (['.ppt', '.pptx'].includes(ext)) return 'PPT';
+  if (['.zip', '.tar', '.gz', '.rar', '.7z'].includes(ext)) return 'ZIP';
+  if (['.mp3', '.wav', '.flac', '.aac', '.ogg'].includes(ext)) return 'AUD';
+  if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(ext)) return 'VID';
+  if (['.py'].includes(ext)) return 'PY';
+  if (['.js', '.jsx'].includes(ext)) return 'JS';
+  if (['.ts', '.tsx'].includes(ext)) return 'TS';
+  if (['.rs'].includes(ext)) return 'RS';
+  if (['.go'].includes(ext)) return 'GO';
+  if (['.java'].includes(ext)) return 'JVA';
+  if (['.rb'].includes(ext)) return 'RB';
+  if (['.c', '.cpp', '.h', '.hpp'].includes(ext)) return 'C';
+  if (['.swift'].includes(ext)) return 'SWF';
+  if (['.json'].includes(ext)) return 'JSN';
+  if (['.yaml', '.yml'].includes(ext)) return 'YML';
+  if (['.toml'].includes(ext)) return 'TML';
+  if (['.xml', '.html'].includes(ext)) return 'XML';
+  if (['.sh', '.bash', '.zsh'].includes(ext)) return 'SH';
+  if (['.sql'].includes(ext)) return 'SQL';
+  if (['.css'].includes(ext)) return 'CSS';
+  if (['.txt'].includes(ext)) return 'TXT';
+  if (['.log'].includes(ext)) return 'LOG';
+  if (info.preview_type === 'text') return 'TXT';
+  return 'FILE';
+}
+
+async function doAction(action) {
+  if (processing || files.length === 0 || settingsOpen) return;
+  processing = true;
+  const filename = files[currentIndex];
+  const direction = action === 'keep' ? 'swipe-right' : 'swipe-left';
+  card.classList.add(action === 'keep' ? 'hint-keep' : 'hint-archive');
+  await new Promise(r => setTimeout(r, 150));
+  card.classList.add(direction);
+  await new Promise(r => setTimeout(r, 400));
+
+  const result = await fetchJSON('/api/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, action }),
+  });
+
+  if (result.status === 'kept_in_place') {
+    currentIndex++;
+    if (currentIndex >= files.length) currentIndex = 0;
+  } else {
+    files.splice(currentIndex, 1);
+    if (currentIndex >= files.length) currentIndex = 0;
+  }
+
+  await updateStats();
+  showCurrent();
+  processing = false;
+}
+
+async function doUndo() {
+  if (processing || settingsOpen) return;
+  processing = true;
+  const result = await fetchJSON('/api/undo', { method: 'POST' });
+  if (result.error) { showToast('Nothing to undo'); processing = false; return; }
+  showToast(`Undid: ${result.file}`);
+  const data = await fetchJSON('/api/files');
+  files = data.files;
+  if (result.action === 'unarchived' || result.action === 'unkept') {
+    const idx = files.indexOf(result.file);
+    if (idx >= 0) currentIndex = idx;
+  } else { if (currentIndex > 0) currentIndex--; }
+  await updateStats();
+  showCurrent();
+  processing = false;
+}
+
+function showToast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  switch (e.key) {
+    case 'ArrowRight': case 'l': case 'L': e.preventDefault(); doAction('keep'); break;
+    case 'ArrowLeft': case 'h': case 'H': e.preventDefault(); doAction('archive'); break;
+    case 'z': case 'Z': e.preventDefault(); doUndo(); break;
+    case 's': case 'S': e.preventDefault(); toggleSettings(); break;
+    case 'Escape': if (settingsOpen) { e.preventDefault(); closeSettings(); } break;
+  }
+});
+
+$('#btn-keep').addEventListener('click', () => doAction('keep'));
+$('#btn-archive').addEventListener('click', () => doAction('archive'));
+$('#btn-undo').addEventListener('click', () => doUndo());
+
+loadFiles();
+
+setInterval(async () => {
+  if (files.length === 0 && !settingsOpen) {
+    const data = await fetchJSON('/api/files');
+    if (data.files.length > 0) { files = data.files; totalFiles = data.total; currentIndex = 0; showCurrent(); }
+  }
+  if (!settingsOpen) updateStats();
+}, 5000);
+</script>
+</body>
+</html>

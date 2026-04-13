@@ -1,0 +1,120 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────
+# FileFlow — Tinder-style file sorter
+# Usage: fileflow [open|start|stop|status]
+# ──────────────────────────────────────────────────
+
+PORT="${FILEFLOW_PORT:-5050}"
+
+# Resolve symlinks to find the real install location
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+APP_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+
+PID_FILE="/tmp/fileflow.pid"
+LOG_FILE="/tmp/fileflow.log"
+URL="http://localhost:$PORT"
+
+ensure_deps() {
+  python3 -c "import flask" 2>/dev/null || {
+    echo "  Installing dependencies..."
+    pip3 install -q flask markdown markupsafe 2>/dev/null
+  }
+}
+
+is_running() {
+  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+start_server() {
+  ensure_deps
+
+  if is_running; then
+    echo "  FileFlow already running (PID $(cat "$PID_FILE"))"
+  else
+    nohup python3 "$APP_DIR/app.py" "$PORT" > "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    sleep 1
+    if is_running; then
+      echo "  FileFlow started (PID $(cat "$PID_FILE"))"
+    else
+      echo "  Failed to start — check $LOG_FILE"
+      return 1
+    fi
+  fi
+}
+
+stop_server() {
+  if is_running; then
+    kill "$(cat "$PID_FILE")" 2>/dev/null
+    rm -f "$PID_FILE"
+    echo "  FileFlow stopped."
+  else
+    echo "  FileFlow is not running."
+  fi
+}
+
+status() {
+  if is_running; then
+    echo "  FileFlow is running (PID $(cat "$PID_FILE"))"
+    echo "  URL: $URL"
+    echo "  Log: $LOG_FILE"
+    echo ""
+    curl -s "$URL/api/stats" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(f\"  Source:  {d['source_dir']}  ({d['source']} files)\")
+    print(f\"  Inbox:   {d['inbox_dir']}  ({d['inbox']} files)\")
+    print(f\"  Archive: {d['archive_dir']}  ({d['archive']} files)\")
+except: pass
+" 2>/dev/null
+  else
+    echo "  FileFlow is not running."
+  fi
+}
+
+open_browser() {
+  if command -v open &>/dev/null; then
+    open "$URL"
+  elif command -v xdg-open &>/dev/null; then
+    xdg-open "$URL"
+  elif command -v wslview &>/dev/null; then
+    wslview "$URL"
+  else
+    echo "  Open $URL in your browser"
+  fi
+}
+
+case "${1:-open}" in
+  start)    start_server ;;
+  stop)     stop_server ;;
+  status|s) status ;;
+  open|"")  start_server && open_browser ;;
+  help|-h|--help)
+    echo "FileFlow — Tinder-style file sorter"
+    echo ""
+    echo "Usage: fileflow [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (none)   Start server and open browser"
+    echo "  start    Start server in background"
+    echo "  stop     Stop the server"
+    echo "  status   Show running state and folder info"
+    echo "  help     Show this message"
+    echo ""
+    echo "Environment:"
+    echo "  FILEFLOW_PORT   Server port (default: 5050)"
+    echo ""
+    echo "Config: ~/.fileflow.json"
+    ;;
+  *)
+    echo "Unknown command: $1"
+    echo "Run 'fileflow help' for usage."
+    exit 1
+    ;;
+esac
