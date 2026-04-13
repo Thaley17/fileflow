@@ -19,7 +19,7 @@ You see each file one at a time with a live preview. Press **right** to keep it 
 **Requirements:** Python 3.7+ (macOS, Linux, WSL)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/fileflow.git
+git clone https://github.com/Thaley17/fileflow.git
 cd fileflow
 bash install.sh
 ```
@@ -114,7 +114,7 @@ If you're an AI agent setting this up for a user, here's what to do:
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/YOUR_USERNAME/fileflow.git
+git clone https://github.com/Thaley17/fileflow.git
 cd fileflow
 bash install.sh
 
