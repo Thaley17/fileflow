@@ -28,10 +28,10 @@ echo "  Found $PYTHON_VERSION"
 
 # 2. Install Python dependencies
 echo "  Installing Python packages..."
-pip3 install -q flask markdown markupsafe 2>/dev/null || \
-  pip3 install --user -q flask markdown markupsafe 2>/dev/null || {
+pip3 install -q -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || \
+  pip3 install --user -q -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || {
     echo "  ERROR: Could not install Python packages."
-    echo "  Try: pip3 install flask markdown markupsafe"
+    echo "  Try: pip3 install -r requirements.txt"
     exit 1
   }
 echo "  Done."

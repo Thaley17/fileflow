@@ -22,7 +22,7 @@ URL="http://localhost:$PORT"
 ensure_deps() {
   python3 -c "import flask" 2>/dev/null || {
     echo "  Installing dependencies..."
-    pip3 install -q flask markdown markupsafe 2>/dev/null
+    pip3 install -q -r "$APP_DIR/requirements.txt" 2>/dev/null
   }
 }
 

@@ -24,6 +24,14 @@ try:
 except ImportError:
     HAS_MARKDOWN = False
 
+try:
+    from PIL import Image
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HAS_HEIF = True
+except ImportError:
+    HAS_HEIF = False
+
 # --- Configuration ---
 DEFAULT_SOURCE = os.path.expanduser("~/FileFlow/Inbox")
 DEFAULT_INBOX = os.path.expanduser("~/FileFlow/Inbox")
@@ -102,6 +110,8 @@ def file_info(filename):
     ext = Path(filename).suffix.lower()
 
     if mime and mime.startswith("image/"):
+        preview_type = "image"
+    elif ext in (".heic", ".heif") and HAS_HEIF:
         preview_type = "image"
     elif ext == ".pdf":
         preview_type = "pdf"
@@ -207,6 +217,19 @@ def api_preview(filename):
         with open(full, "r", errors="replace") as f:
             content = f.read(500_000)
         return jsonify({"text": content})
+
+    # HEIC/HEIF → JPEG conversion for browser preview
+    if ext in (".heic", ".heif") and HAS_HEIF:
+        try:
+            import io
+            img = Image.open(full)
+            img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            buf.seek(0)
+            return send_file(buf, mimetype="image/jpeg")
+        except Exception:
+            pass  # Fall through to raw send
 
     return send_file(full, mimetype=mime or "application/octet-stream")
 

@@ -671,6 +671,7 @@ async function loadFilePreview(filename) {
 
 function getTypeLabel(info) {
   const ext = info.extension;
+  if (['.heic', '.heif'].includes(ext)) return 'HEIC';
   if (info.preview_type === 'image') return 'IMG';
   if (ext === '.pdf') return 'PDF';
   if (['.md', '.markdown'].includes(ext)) return 'MD';
