@@ -39,13 +39,13 @@
   .header h1 { font-size: 17px; font-weight: 500; letter-spacing: -0.3px; color: var(--text-mid); }
   .header h1 span { color: var(--text); font-weight: 600; }
   .settings-btn {
-    width: 30px; height: 30px; border-radius: 6px;
-    border: 1px solid var(--card-border); background: transparent;
-    color: var(--text-dim); font-size: 14px; cursor: pointer;
+    width: 32px; height: 32px; border-radius: 6px;
+    border: 1px solid #3a3a3a; background: transparent;
+    color: var(--text-mid); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: all 0.15s ease;
   }
-  .settings-btn:hover { color: var(--text); border-color: var(--text-dim); }
+  .settings-btn:hover { color: var(--text); border-color: var(--text-mid); background: var(--accent-dim); }
   .settings-btn.active { color: var(--text); border-color: var(--text-mid); background: var(--accent-dim); }
   .stats { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); letter-spacing: 0.3px; text-transform: uppercase; }
   .stats .count { color: var(--text-mid); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -308,7 +308,7 @@
   <div class="header-left">
     <h1>file<span>flow</span></h1>
     <button class="settings-btn" id="settings-toggle" title="Settings (S)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
   </div>
   <div class="stats">
