@@ -15,9 +15,37 @@ while [ -L "$SOURCE" ]; do
 done
 APP_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 
-PID_FILE="/tmp/fileflow.pid"
 LOG_FILE="/tmp/fileflow.log"
 URL="http://localhost:$PORT"
+
+# ── Port-based process detection (no PID file needed) ──
+
+get_pid() {
+  # Returns the PID of whatever is listening on $PORT, or empty
+  lsof -ti ":$PORT" 2>/dev/null | head -1
+}
+
+is_running() {
+  [ -n "$(get_pid)" ]
+}
+
+kill_port() {
+  # Kill anything on the port — graceful first, force after 2s
+  local pids
+  pids=$(lsof -ti ":$PORT" 2>/dev/null)
+  [ -z "$pids" ] && return 0
+
+  kill $pids 2>/dev/null
+  # Wait up to 2s for clean shutdown
+  for i in 1 2 3 4; do
+    sleep 0.5
+    pids=$(lsof -ti ":$PORT" 2>/dev/null)
+    [ -z "$pids" ] && return 0
+  done
+  # Force kill stragglers
+  kill -9 $pids 2>/dev/null
+  sleep 0.5
+}
 
 ensure_deps() {
   python3 -c "import flask" 2>/dev/null || {
@@ -26,41 +54,47 @@ ensure_deps() {
   }
 }
 
-is_running() {
-  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
-}
-
 start_server() {
   ensure_deps
 
   if is_running; then
-    echo "  FileFlow already running (PID $(cat "$PID_FILE"))"
-  else
-    nohup python3 "$APP_DIR/app.py" "$PORT" > "$LOG_FILE" 2>&1 &
-    echo $! > "$PID_FILE"
-    sleep 1
-    if is_running; then
-      echo "  FileFlow started (PID $(cat "$PID_FILE"))"
-    else
-      echo "  Failed to start — check $LOG_FILE"
-      return 1
-    fi
+    echo "  FileFlow already running (PID $(get_pid)) on port $PORT"
+    return 0
   fi
+
+  nohup python3 "$APP_DIR/app.py" "$PORT" > "$LOG_FILE" 2>&1 &
+  sleep 1
+
+  if is_running; then
+    echo "  FileFlow started (PID $(get_pid)) on port $PORT"
+  else
+    echo "  Failed to start — check $LOG_FILE"
+    return 1
+  fi
+}
+
+restart_server() {
+  if is_running; then
+    echo "  Stopping FileFlow (PID $(get_pid))..."
+    kill_port
+  fi
+  start_server
 }
 
 stop_server() {
   if is_running; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null
-    rm -f "$PID_FILE"
-    echo "  FileFlow stopped."
+    local pid
+    pid=$(get_pid)
+    kill_port
+    echo "  FileFlow stopped (was PID $pid)."
   else
-    echo "  FileFlow is not running."
+    echo "  FileFlow is not running on port $PORT."
   fi
 }
 
 status() {
   if is_running; then
-    echo "  FileFlow is running (PID $(cat "$PID_FILE"))"
+    echo "  FileFlow is running (PID $(get_pid)) on port $PORT"
     echo "  URL: $URL"
     echo "  Log: $LOG_FILE"
     echo ""
@@ -74,7 +108,7 @@ try:
 except: pass
 " 2>/dev/null
   else
-    echo "  FileFlow is not running."
+    echo "  FileFlow is not running on port $PORT."
   fi
 }
 
@@ -91,21 +125,23 @@ open_browser() {
 }
 
 case "${1:-open}" in
-  start)    start_server ;;
-  stop)     stop_server ;;
-  status|s) status ;;
-  open|"")  start_server && open_browser ;;
+  start)      start_server ;;
+  stop)       stop_server ;;
+  restart|r)  restart_server ;;
+  status|s)   status ;;
+  open|"")    start_server && open_browser ;;
   help|-h|--help)
     echo "FileFlow — Tinder-style file sorter"
     echo ""
     echo "Usage: fileflow [command]"
     echo ""
     echo "Commands:"
-    echo "  (none)   Start server and open browser"
-    echo "  start    Start server in background"
-    echo "  stop     Stop the server"
-    echo "  status   Show running state and folder info"
-    echo "  help     Show this message"
+    echo "  (none)    Start server and open browser"
+    echo "  start     Start server in background"
+    echo "  stop      Stop the server"
+    echo "  restart   Stop + start (clears port conflicts)"
+    echo "  status    Show running state and folder info"
+    echo "  help      Show this message"
     echo ""
     echo "Environment:"
     echo "  FILEFLOW_PORT   Server port (default: 5050)"
